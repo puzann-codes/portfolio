@@ -1,26 +1,223 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-electric: #0a0a0a;
+  --color-electric-dim: #000000;
+  --color-ink: #0a0a0b;
+  --color-paper: #f5f3ee;
+  --color-paper-dim: #e8e4d9;
+  --color-harvo: #e2a53d;
+  --color-sunuwa: #ff5b46;
+  --color-sajhadoctor: #1fb8a3;
+  --color-codewithme: #7c5cff;
+  --transition-color: var(--color-electric);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-electric: var(--color-electric);
+  --color-electric-dim: var(--color-electric-dim);
+  --color-ink: var(--color-ink);
+  --color-paper: var(--color-paper);
+  --color-paper-dim: var(--color-paper-dim);
+  --color-harvo: var(--color-harvo);
+  --color-sunuwa: var(--color-sunuwa);
+  --color-sajhadoctor: var(--color-sajhadoctor);
+  --color-codewithme: var(--color-codewithme);
+  --font-display: var(--font-unbounded);
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
+  overflow-x: clip;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans), sans-serif;
+}
+
+::selection {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+/* outline/stroke text — used on the currently-hovered hero row (see HeroProjectList) */
+/* uses an explicit var rather than currentColor, since color is set transparent on this same rule */
+/* a single `filter: drop-shadow` (not text-shadow, which paints a solid glyph copy and
+   fills the hollow interior back in) gives one clean echo behind the outline — a single
+   crisp layer reads as "3D depth", stacking several muddies the outline into a mess */
+.text-stroke {
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--stroke-color, var(--color-ink));
+  text-stroke: 1.5px var(--stroke-color, var(--color-ink));
+  filter: drop-shadow(4px 5px 0 var(--stroke-color, var(--color-ink)));
+}
+
+@media (min-width: 1024px) {
+  .text-stroke {
+    -webkit-text-stroke-width: 2px;
+    text-stroke-width: 2px;
+    filter: drop-shadow(6px 8px 0 var(--stroke-color, var(--color-ink)));
+  }
+}
+
+/* custom cursor dot — see components/Cursor.tsx for the motion-value driven
+   position/size/squash-stretch; color lives here as plain CSS so it
+   transitions smoothly without needing its own motion value.
+   Real glass, not a lit-up highlight: mostly transparent fill (you can read
+   whatever's underneath through it), backdrop-filter for a touch of lens
+   refraction, and a thin bright/dark edge pair for a rim instead of a glow.
+   --tint (an "r, g, b" triplet, default white) lets a hovered card recolor
+   the glass without swapping the whole gradient. */
+.cursor-dot {
+  --tint: 255, 255, 255;
+  background: rgba(var(--tint), 0.07);
+  backdrop-filter: blur(2px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset -1px -2px 3px rgba(0, 0, 0, 0.2),
+    inset 1px 2px 2px rgba(255, 255, 255, 0.35);
+  transition:
+    background 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.cursor-dot--active {
+  border-color: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(3px) saturate(150%);
+  box-shadow:
+    inset -1px -2px 4px rgba(0, 0, 0, 0.18),
+    inset 1px 2px 3px rgba(255, 255, 255, 0.45);
+}
+
+/* project-card hover: a smaller droplet (see CARD_HOVER_SIZE in Cursor.tsx —
+   deliberately modest, never big enough to cover a card that's still drifting
+   on its own) tinted with that project's own accent color, plus a thin ring
+   that pings outward like a ripple — a nod to the card without ever parking
+   a solid shape or a glow on top of it. */
+.cursor-dot--card {
+  background: rgba(var(--tint), 0.1);
+  border-color: rgba(var(--tint), 0.5);
+  box-shadow:
+    inset -1px -2px 3px rgba(0, 0, 0, 0.22),
+    inset 1px 2px 2px rgba(255, 255, 255, 0.4);
+}
+
+.cursor-dot--card::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 9999px;
+  border: 1px solid rgba(var(--tint), 0.5);
+  opacity: 0;
+  animation: cursor-ping 1.3s ease-out infinite;
+}
+
+@keyframes cursor-ping {
+  0% {
+    transform: scale(0.75);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* grain texture overlay, generated, no image asset */
+.grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  z-index: 60;
+}
+
+@keyframes blob-morph {
+  0%,
+  100% {
+    border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%;
+  }
+  25% {
+    border-radius: 58% 42% 35% 65% / 55% 60% 40% 45%;
+  }
+  50% {
+    border-radius: 65% 35% 45% 55% / 40% 55% 45% 60%;
+  }
+  75% {
+    border-radius: 35% 65% 55% 45% / 60% 45% 55% 40%;
+  }
+}
+
+@keyframes blob-morph-alt {
+  0%,
+  100% {
+    border-radius: 55% 45% 40% 60% / 60% 50% 50% 40%;
+  }
+  33% {
+    border-radius: 40% 60% 55% 45% / 45% 55% 45% 55%;
+  }
+  66% {
+    border-radius: 60% 40% 45% 55% / 50% 45% 55% 50%;
+  }
+}
+
+.animate-blob {
+  animation: blob-morph 14s ease-in-out infinite;
+}
+
+.animate-blob-alt {
+  animation: blob-morph-alt 18s ease-in-out infinite reverse;
+}
+
+@property --blob-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes blob-spin {
+  to {
+    --blob-angle: 360deg;
+  }
+}
+
+.animate-blob-spin {
+  animation:
+    blob-morph 14s ease-in-out infinite,
+    blob-spin 16s linear infinite;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
