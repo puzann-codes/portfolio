@@ -7,6 +7,22 @@ import { useWipeTransition } from "./TransitionProvider";
 import { cn } from "@/lib/utils";
 
 const N = projects.length;
+const NORMAL_SPEED = 0.012;
+// "way faster than now" for the opening sweep, before the brand name docks
+const FAST_SPEED = 0.32;
+const SETTLE_DURATION = 0.7;
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+// classic overshoot-then-settle curve — used both for the text's pop-in at
+// the top of the path and its bouncy landing in the corner
+function easeOutBack(x: number) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+}
 
 // One clean pass, top to bottom, through four named waypoints: rightish at
 // the top, leftish at the middle, rightish again a bit below middle, then
@@ -65,10 +81,30 @@ function getCardPose(
   return { x, y, z, rotateY, blur, opacity: opacity * edgeFade };
 }
 
+// The brand name rides the exact same lateral/vertical curve as the cards
+// (same x/y math, no seed jitter) but skips the rotateY spin and blur — it
+// needs to stay flat and legible the whole way down while cards blur past
+// around it. A quick overshoot pop sells the "smooth and bouncy" entrance
+// at the very top instead of just fading in.
+function getTextPose(t: number, spreadScale: number, topY: number, bottomY: number) {
+  const y = topY + (bottomY - topY) * t;
+  const amplitude = 400 * spreadScale;
+  const x = amplitude * Math.cos(t * 3 * Math.PI);
+  const z = -360 + 620 * Math.sin(t * Math.PI);
+
+  const entryT = Math.min(1, t / 0.12);
+  const scale = entryT < 1 ? Math.max(0, easeOutBack(entryT)) : 1;
+  const opacity = entryT < 1 ? entryT : 1;
+
+  return { x, y, z, scale, opacity };
+}
+
 export default function SpiralGallery({
+  introDone,
   setIntensity,
   playTick,
 }: {
+  introDone: boolean;
   setIntensity: (speed: number) => void;
   playTick: () => void;
 }) {
@@ -76,12 +112,19 @@ export default function SpiralGallery({
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRefs = useRef<(HTMLDivElement | null)[]>([]);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const textWrapperRef = useRef<HTMLDivElement>(null);
+  const textCardRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef(0);
   const velocityRef = useRef(0);
+  const currentSpeedRef = useRef(0);
+  const introDoneRef = useRef(introDone);
   const [hovered, setHovered] = useState<string | null>(null);
 
   useEffect(() => {
-    const baseSpeed = 0.012;
+    introDoneRef.current = introDone;
+  }, [introDone]);
+
+  useEffect(() => {
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -93,11 +136,52 @@ export default function SpiralGallery({
     // falls within view instead of running mostly off-screen
     const topY = -window.innerHeight * 0.65;
     const bottomY = window.innerHeight * 0.65;
+    // where the brand name lands after its bouncy landing — bottom-left
+    // corner, in the same wrapper-centered coordinate space as the path
+    const finalX = -window.innerWidth / 2 + 150;
+    const finalY = window.innerHeight / 2 - 96;
+
+    type TextPhase = "traveling" | "settling" | "settled";
+    let textPhase: TextPhase = reduced ? "settled" : "traveling";
+    let settleProgress = 0;
+    let settleStart = { x: finalX, y: finalY, z: 0, scale: 1 };
 
     let raf = 0;
     let last = performance.now();
 
+    const renderText = () => {
+      const wrapperEl = textWrapperRef.current;
+      const cardEl = textCardRef.current;
+      if (!wrapperEl || !cardEl) return;
+
+      if (textPhase === "traveling") {
+        const t = Math.min(1, progressRef.current);
+        const pose = getTextPose(t, spreadScale, topY, bottomY);
+        wrapperEl.style.transform = `translate3d(-50%, -50%, 0) translateY(${pose.y}px)`;
+        cardEl.style.transform = `translateX(${pose.x}px) translateZ(${pose.z}px) scale(${pose.scale})`;
+        cardEl.style.opacity = String(pose.opacity);
+        if (t >= 1) {
+          settleStart = { x: pose.x, y: pose.y, z: pose.z, scale: pose.scale };
+          textPhase = "settling";
+        }
+        return;
+      }
+
+      const st = textPhase === "settled" ? 1 : Math.min(1, settleProgress);
+      const eased = easeOutBack(st);
+      const x = lerp(settleStart.x, finalX, eased);
+      const y = lerp(settleStart.y, finalY, eased);
+      const z = lerp(settleStart.z, 0, eased);
+      const scale = lerp(settleStart.scale, 1, eased);
+      wrapperEl.style.transform = `translate3d(-50%, -50%, 0) translateY(${y}px)`;
+      cardEl.style.transform = `translateX(${x}px) translateZ(${z}px) scale(${scale})`;
+      cardEl.style.opacity = "1";
+    };
+
     const render = () => {
+      const speedBlur =
+        textPhase !== "settled" ? Math.min(18, currentSpeedRef.current * 55) : 0;
+
       wrapperRefs.current.forEach((wrapperEl, i) => {
         const cardEl = cardRefs.current[i];
         if (!wrapperEl || !cardEl) return;
@@ -118,18 +202,31 @@ export default function SpiralGallery({
         // local figure-8 wobble, isolated in its own perspective context
         cardEl.style.transform = `translateX(${x}px) translateZ(${z}px) rotateY(${rotateY}deg)`;
         cardEl.style.opacity = String(opacity);
-        cardEl.style.filter = blur > 0.4 ? `blur(${blur}px)` : "none";
+        const totalBlur = blur + speedBlur;
+        cardEl.style.filter = totalBlur > 0.4 ? `blur(${totalBlur}px)` : "none";
       });
+
+      renderText();
     };
 
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
 
-      const speed = baseSpeed + velocityRef.current;
+      const baseSpeed = textPhase === "settled" ? NORMAL_SPEED : FAST_SPEED;
+      const speed = introDoneRef.current ? baseSpeed + velocityRef.current : 0;
       progressRef.current += speed * dt;
       velocityRef.current *= 0.92;
+      currentSpeedRef.current = speed;
       setIntensity(speed);
+
+      if (textPhase === "settling") {
+        settleProgress += dt / SETTLE_DURATION;
+        if (settleProgress >= 1) {
+          settleProgress = 1;
+          textPhase = "settled";
+        }
+      }
 
       render();
       raf = requestAnimationFrame(tick);
@@ -213,6 +310,23 @@ export default function SpiralGallery({
           </div>
         </div>
       ))}
+
+      <div
+        ref={textWrapperRef}
+        className="absolute left-1/2 top-1/2 z-[500] will-change-transform"
+        style={{ perspective: 1000 }}
+      >
+        <div ref={textCardRef} data-cursor="hover" className="will-change-transform">
+          <p className="font-display text-3xl font-bold uppercase leading-[0.9] text-paper md:text-4xl">
+            Pujan
+            <br />
+            Bhatt
+          </p>
+          <p className="mt-2 font-sans text-sm text-paper/70 md:text-base">
+            Full-Stack &amp; AI Engineer
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

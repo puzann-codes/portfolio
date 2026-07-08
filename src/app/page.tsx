@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import SpiralGallery from "@/components/SpiralGallery";
@@ -9,19 +9,45 @@ import { useAmbientSound } from "@/lib/useAmbientSound";
 
 const HeroCar3D = dynamic(() => import("@/components/HeroCar3D"), { ssr: false });
 
-// intro choreography: the brand name shows up huge and centered the instant
-// the page loads (it doesn't wait on the car's model download), holds that
-// size while the 3D rig runs its own zoom-out/rotate animation, then the
-// moment the car settles it "docks" — collapsing down into its small resting
-// corner — followed by the subtitle fading in, then the spiral gallery.
-// Four beats, one continuous handoff instead of four separate reveals.
-const DOCK_DURATION = 0.95;
-const CARDS_DELAY = DOCK_DURATION + 0.35;
-
+// intro choreography: the 3D car rig runs its own zoom-out/rotate animation
+// and calls onIntroComplete once it settles. That single moment is the
+// starting gun for SpiralGallery's own sequence — the brand name and cards
+// pop in and sweep down the conveyor path fast (with a motion-blur flourish
+// on the cards), the brand name lands with a bounce in its resting corner,
+// and the conveyor eases back down to its normal ambient drift once it does.
 export default function Home() {
   const [introDone, setIntroDone] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
   const { enable, disable, setIntensity, playTick } = useAmbientSound();
+  const soundOnRef = useRef(soundOn);
+  const unlockedRef = useRef(false);
+
+  useEffect(() => {
+    soundOnRef.current = soundOn;
+  }, [soundOn]);
+
+  useEffect(() => {
+    // browsers block audio until a real user gesture — sound defaults to
+    // "on" in UI state, but the AudioContext itself only actually starts
+    // the moment the user first interacts with the page at all, not
+    // specifically the mute button
+    const unlock = () => {
+      if (unlockedRef.current) return;
+      unlockedRef.current = true;
+      if (soundOnRef.current) enable();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("wheel", unlock);
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    window.addEventListener("wheel", unlock, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("wheel", unlock);
+    };
+  }, [enable]);
 
   return (
     <main className="relative h-screen overflow-hidden bg-electric">
@@ -32,40 +58,14 @@ export default function Home() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: introDone ? 1 : 0 }}
-        transition={{ duration: 0.8, delay: introDone ? CARDS_DELAY : 0 }}
+        transition={{ duration: 0.15 }}
         className="relative z-10 h-full w-full"
       >
-        <SpiralGallery setIntensity={setIntensity} playTick={playTick} />
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, scale: 4.2, x: "36vw", y: "-40vh" }}
-        animate={
-          introDone
-            ? { opacity: 1, scale: 1, x: 0, y: 0 }
-            : { opacity: 1, scale: 4.2, x: "36vw", y: "-40vh" }
-        }
-        transition={
-          introDone
-            ? { duration: DOCK_DURATION, ease: [0.16, 1, 0.3, 1] }
-            : { duration: 0.7, ease: "easeOut", delay: 0.15 }
-        }
-        data-cursor="hover"
-        className="absolute bottom-8 left-6 z-20 md:bottom-10 md:left-10"
-      >
-        <p className="font-display text-3xl font-bold uppercase leading-[0.9] text-paper md:text-4xl">
-          Pujan
-          <br />
-          Bhatt
-        </p>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: introDone ? 1 : 0 }}
-          transition={{ duration: 0.5, delay: introDone ? DOCK_DURATION * 0.55 : 0 }}
-          className="mt-2 font-sans text-sm text-paper/70 md:text-base"
-        >
-          Full-Stack &amp; AI Engineer
-        </motion.p>
+        <SpiralGallery
+          introDone={introDone}
+          setIntensity={setIntensity}
+          playTick={playTick}
+        />
       </motion.div>
 
       <button

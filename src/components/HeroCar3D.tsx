@@ -20,6 +20,53 @@ const FRONT_WHEEL_NAMES = ["WheelFrontL", "WheelFrontR"];
 const REAR_WHEEL_NAMES = ["WheelRearL", "WheelRearR"];
 const PAINT_MATERIAL_NAMES = ["Paint 1 Carmine", "Paint 2 Carmine"];
 const SMOKE_COUNT = 10;
+const SPIN_AXIS = new THREE.Vector3(1, 0, 0);
+
+// The front wheels' hub nodes carry a compound base rotation (a steering
+// angle baked into the model, not a plain single-axis orientation like the
+// rear hubs). Naively nudging `.rotation.x` each frame re-derives the whole
+// Euler orientation from scratch every time, which doesn't compose the way
+// a "spin around the axle" should when the base orientation isn't axis
+// -aligned — it reads as a wobbling, misassembled wheel. Capturing the
+// hub's original quaternion once and re-deriving `initial * spin(angle)`
+// every frame instead rotates around the wheel's own authored roll axis
+// regardless of whatever steering angle is baked into its base transform.
+type WheelSpin = {
+  object: THREE.Object3D;
+  initialQuat: THREE.Quaternion;
+  angle: number;
+};
+
+function buildWheelSpins(
+  model: THREE.Object3D,
+  names: string[],
+  referenceNames?: string[],
+): WheelSpin[] {
+  return names
+    .map((name, i) => {
+      const object = model.getObjectByName(name);
+      if (!object) return null;
+      // the front hubs ship a compound steer/camber orientation baked into
+      // their base rotation (unlike the rear hubs, which are a plain single
+      // -axis mount) — visually that reads as the front wheels sitting
+      // turned/crooked. Borrowing the same-side rear hub's clean rotation
+      // as the "neutral" pose keeps the front wheel's own position but
+      // straightens it out to match the rear.
+      const referenceObject = referenceNames
+        ? model.getObjectByName(referenceNames[i])
+        : null;
+      const initialQuat = (referenceObject ?? object).quaternion.clone();
+      return { object, initialQuat, angle: 0 };
+    })
+    .filter((wheel): wheel is WheelSpin => Boolean(wheel));
+}
+
+function spinWheel(wheel: WheelSpin, deltaAngle: number) {
+  wheel.angle += deltaAngle;
+  wheel.object.quaternion
+    .copy(wheel.initialQuat)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(SPIN_AXIS, wheel.angle));
+}
 
 // a soft radial-gradient sprite, generated once at runtime — the base
 // texture for every smoke puff, no image asset needed
@@ -44,8 +91,8 @@ function CarModel({
   frontWheelsRef,
   rearWheelsRef,
 }: {
-  frontWheelsRef: React.RefObject<THREE.Object3D[]>;
-  rearWheelsRef: React.RefObject<THREE.Object3D[]>;
+  frontWheelsRef: React.RefObject<WheelSpin[]>;
+  rearWheelsRef: React.RefObject<WheelSpin[]>;
 }) {
   const { scene } = useGLTF("/models/car.glb");
   const model = useMemo(() => scene.clone(true), [scene]);
@@ -67,13 +114,6 @@ function CarModel({
       }
     });
 
-    frontWheelsRef.current = FRONT_WHEEL_NAMES.map((name) =>
-      model.getObjectByName(name),
-    ).filter((obj): obj is THREE.Object3D => Boolean(obj));
-    rearWheelsRef.current = REAR_WHEEL_NAMES.map((name) =>
-      model.getObjectByName(name),
-    ).filter((obj): obj is THREE.Object3D => Boolean(obj));
-
     // the brake caliper/pad is modeled as a child of the wheel hub, but a
     // real caliper is mounted to the suspension and doesn't spin with the
     // wheel — left as a child, it ends up pointing in a random direction
@@ -87,6 +127,9 @@ function CarModel({
         wheelGroup.parent.attach(brakePad);
       }
     }
+
+    frontWheelsRef.current = buildWheelSpins(model, FRONT_WHEEL_NAMES, REAR_WHEEL_NAMES);
+    rearWheelsRef.current = buildWheelSpins(model, REAR_WHEEL_NAMES);
   }, [model, frontWheelsRef, rearWheelsRef]);
 
   return <primitive object={model} />;
@@ -121,8 +164,8 @@ function Rig({
   const { camera } = useThree();
   const lastHoverTickRef = useRef(0);
   const carGroupRef = useRef<THREE.Group>(null);
-  const frontWheelsRef = useRef<THREE.Object3D[]>([]);
-  const rearWheelsRef = useRef<THREE.Object3D[]>([]);
+  const frontWheelsRef = useRef<WheelSpin[]>([]);
+  const rearWheelsRef = useRef<WheelSpin[]>([]);
   const elapsedRef = useRef(0);
   const prevEasedRef = useRef(0);
   const doneRef = useRef(false);
@@ -143,7 +186,7 @@ function Rig({
     if (rearWheelsRef.current.length < 2 || !carGroupRef.current) return null;
     const locals = rearWheelsRef.current.slice(0, 2).map((wheel) => {
       const world = new THREE.Vector3();
-      wheel.getWorldPosition(world);
+      wheel.object.getWorldPosition(world);
       return carGroupRef.current!.worldToLocal(world);
     }) as [THREE.Vector3, THREE.Vector3];
     rearWheelLocalRef.current = locals;
@@ -187,7 +230,7 @@ function Rig({
       const spin = (eased - prevEasedRef.current) * 46;
       prevEasedRef.current = eased;
       for (const wheel of [...frontWheelsRef.current, ...rearWheelsRef.current]) {
-        wheel.rotation.x -= spin;
+        spinWheel(wheel, -spin);
       }
 
       if (t >= 1) {
@@ -202,7 +245,7 @@ function Rig({
     scrollVelocityRef.current *= 0.9;
     const speed = scrollVelocityRef.current;
     for (const wheel of rearWheelsRef.current) {
-      wheel.rotation.x -= speed;
+      spinWheel(wheel, -speed);
     }
 
     // smoke: spawn rate scales with rear-wheel speed
