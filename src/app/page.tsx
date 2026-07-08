@@ -1,28 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import SpiralGallery from "@/components/SpiralGallery";
 import GridBackdrop from "@/components/GridBackdrop";
+import IntroScreen from "@/components/IntroScreen";
 import { useAmbientSound } from "@/lib/useAmbientSound";
+import { useNavVisibility } from "@/components/NavVisibilityProvider";
 import { cn } from "@/lib/utils";
 
 const HeroCar3D = dynamic(() => import("@/components/HeroCar3D"), { ssr: false });
 
-// intro choreography: the page opens on just the huge brand name and a
-// minimal sound choice — nothing else has even started loading yet. That
-// choice is the one deliberate click sound needs (clicking it directly is
-// a real user gesture, so audio starts reliably instead of guessing at
-// which interaction counts). The name then bounces down into its small
-// resting corner, the 3D car only mounts now and runs its own reveal, and
-// once it settles the gallery sweeps in fast for its opening pass before
-// easing down to its normal slow drift.
+// intro choreography: the page opens on IntroScreen alone — just the huge
+// kinetic-type name, a scramble-revealed role line, and the sound choice
+// (nav bar hidden for this beat too). That choice is the one deliberate
+// click sound needs: clicking it directly is a real user gesture, so audio
+// starts reliably. IntroScreen then fades out while the small corner name
+// fades/slides in — never scaled up from it, so it stays crisp — the 3D
+// car only mounts now and runs its own reveal, and once it settles the
+// gallery sweeps in fast for its opening pass before easing to its normal
+// slow drift.
 export default function Home() {
   const [consentGiven, setConsentGiven] = useState(false);
   const [introDone, setIntroDone] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
   const { enable, disable, setIntensity, playTick } = useAmbientSound();
+  const { setHidden } = useNavVisibility();
+
+  useEffect(() => {
+    setHidden(!consentGiven);
+  }, [consentGiven, setHidden]);
 
   const handleContinue = (withSound: boolean) => {
     setSoundOn(withSound);
@@ -51,57 +59,28 @@ export default function Home() {
         />
       </motion.div>
 
-      <motion.div
-        initial={false}
-        animate={
-          consentGiven
-            ? { scale: 1, x: 0, y: 0 }
-            : { scale: 4.2, x: "36vw", y: "-40vh" }
-        }
-        transition={{ type: "spring", stiffness: 190, damping: 15 }}
-        data-cursor="hover"
-        className="absolute bottom-8 left-6 z-30 md:bottom-10 md:left-10"
-      >
-        <p className="font-display text-3xl font-bold uppercase leading-[0.9] text-paper md:text-4xl">
-          Pujan
-          <br />
-          Bhatt
-        </p>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: consentGiven ? 1 : 0 }}
-          transition={{ duration: 0.5, delay: consentGiven ? 0.5 : 0 }}
-          className="mt-2 font-sans text-sm text-paper/70 md:text-base"
-        >
-          Full-Stack &amp; AI Engineer
-        </motion.p>
-      </motion.div>
-
-      {!consentGiven && (
+      {consentGiven && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="absolute inset-x-0 bottom-24 z-30 flex justify-center gap-3 md:bottom-28"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          data-cursor="hover"
+          className="absolute bottom-8 left-6 z-30 md:bottom-10 md:left-10"
         >
-          <button
-            type="button"
-            data-cursor="hover"
-            onClick={() => handleContinue(true)}
-            className="rounded-full border border-paper/20 px-5 py-2 font-mono text-xs uppercase tracking-[0.2em] text-paper/80 transition-colors hover:border-paper/50 hover:text-paper"
-          >
-            Continue with sound
-          </button>
-          <button
-            type="button"
-            data-cursor="hover"
-            onClick={() => handleContinue(false)}
-            className="rounded-full border border-paper/20 px-5 py-2 font-mono text-xs uppercase tracking-[0.2em] text-paper/50 transition-colors hover:border-paper/50 hover:text-paper"
-          >
-            Continue without sound
-          </button>
+          <p className="font-display text-3xl font-bold uppercase leading-[0.9] text-paper md:text-4xl">
+            Pujan
+            <br />
+            Bhatt
+          </p>
+          <p className="mt-2 font-sans text-sm text-paper/70 md:text-base">
+            Full-Stack &amp; AI Engineer
+          </p>
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {!consentGiven && <IntroScreen onContinue={handleContinue} />}
+      </AnimatePresence>
 
       {consentGiven && (
         <button

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
 import Magnetic from "./Magnetic";
+import { useNavVisibility } from "./NavVisibilityProvider";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -37,9 +39,17 @@ function NavLink({ href, label }: { href: string; label: string }) {
 export default function NavBar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
+  const { hidden } = useNavVisibility();
+
+  if (hidden) return null;
 
   return (
-    <header className="fixed inset-x-0 top-0 z-[100]">
+    <motion.header
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="fixed inset-x-0 top-0 z-[100]"
+    >
       <nav
         className={cn(
           "flex items-center justify-end gap-6 px-6 py-6 md:gap-10 md:px-10 md:py-8",
@@ -50,6 +60,6 @@ export default function NavBar() {
           <NavLink key={l.href} {...l} />
         ))}
       </nav>
-    </header>
+    </motion.header>
   );
 }

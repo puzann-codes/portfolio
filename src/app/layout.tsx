@@ -7,6 +7,7 @@ import GrainOverlay from "@/components/GrainOverlay";
 import Cursor from "@/components/Cursor";
 import SmoothScrollProvider from "@/components/SmoothScrollProvider";
 import TransitionProvider, { PageFade } from "@/components/TransitionProvider";
+import { NavVisibilityProvider } from "@/components/NavVisibilityProvider";
 
 const unbounded = Unbounded({
   variable: "--font-unbounded",
@@ -51,13 +52,15 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <SmoothScrollProvider>
           <TransitionProvider>
-            <GrainOverlay />
-            <Cursor />
-            <NavBar />
-            <div className="flex-1">
-              <PageFade>{children}</PageFade>
-            </div>
-            <ConditionalFooter />
+            <NavVisibilityProvider>
+              <GrainOverlay />
+              <Cursor />
+              <NavBar />
+              <div className="flex-1">
+                <PageFade>{children}</PageFade>
+              </div>
+              <ConditionalFooter />
+            </NavVisibilityProvider>
           </TransitionProvider>
         </SmoothScrollProvider>
       </body>
