@@ -27,32 +27,41 @@ export default function Home() {
   }, [soundOn]);
 
   useEffect(() => {
-    // browsers block audio until a real user gesture — sound defaults to
-    // "on" in UI state, but the AudioContext itself only actually starts
-    // the moment the user first interacts with the page at all, not
-    // specifically the mute button. Not every gesture type is accepted as
-    // a valid "user activation" by every browser's autoplay policy (`wheel`
-    // in particular often isn't), so `enable()` reports back whether it
-    // actually got the context running — if not, the listeners stay
-    // attached and it just tries again on the next gesture instead of
-    // giving up silently after one failed attempt.
+    // No website can play audio before a real user gesture — every browser
+    // blocks it at the engine level, full stop, regardless of what this
+    // code does. Sound defaults to "on" in UI state, and the goal here is
+    // just to catch the very first qualifying gesture, whatever form it
+    // takes, as fast as possible. Not every gesture type counts as a valid
+    // "user activation" for the autoplay policy in every browser (`wheel`
+    // in particular often doesn't), so this listens on a wide spread of
+    // them and `enable()` reports back whether it actually got the context
+    // running — a non-qualifying one just leaves the rest listening
+    // instead of giving up after a single failed attempt.
+    const events = [
+      "pointerdown",
+      "pointerup",
+      "mousedown",
+      "mouseup",
+      "click",
+      "touchstart",
+      "touchend",
+      "keydown",
+      "wheel",
+    ] as const;
+
     const unlock = () => {
       if (unlockedRef.current || !soundOnRef.current) return;
       enable().then((running) => {
         if (!running) return;
         unlockedRef.current = true;
-        window.removeEventListener("pointerdown", unlock);
-        window.removeEventListener("keydown", unlock);
-        window.removeEventListener("wheel", unlock);
+        for (const type of events) window.removeEventListener(type, unlock);
       });
     };
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
-    window.addEventListener("wheel", unlock, { passive: true });
+    for (const type of events) {
+      window.addEventListener(type, unlock, { passive: true });
+    }
     return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-      window.removeEventListener("wheel", unlock);
+      for (const type of events) window.removeEventListener(type, unlock);
     };
   }, [enable]);
 
