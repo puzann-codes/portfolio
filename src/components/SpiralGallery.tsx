@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { projects } from "@/lib/projects";
 import ProjectCover from "./ProjectCover";
 import { useWipeTransition } from "./TransitionProvider";
+import { useAmbientSound } from "@/lib/useAmbientSound";
 import { cn } from "@/lib/utils";
 
 const N = projects.length;
@@ -73,6 +74,8 @@ export default function SpiralGallery() {
   const progressRef = useRef(0);
   const velocityRef = useRef(0);
   const [hovered, setHovered] = useState<string | null>(null);
+  const [soundOn, setSoundOn] = useState(false);
+  const { enable, disable, setIntensity, playTick } = useAmbientSound();
 
   useEffect(() => {
     const baseSpeed = 0.012;
@@ -120,8 +123,10 @@ export default function SpiralGallery() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
 
-      progressRef.current += (baseSpeed + velocityRef.current) * dt;
+      const speed = baseSpeed + velocityRef.current;
+      progressRef.current += speed * dt;
       velocityRef.current *= 0.92;
+      setIntensity(speed);
 
       render();
       raf = requestAnimationFrame(tick);
@@ -139,6 +144,7 @@ export default function SpiralGallery() {
       if (reduced) {
         // manual, user-initiated scrubbing only — no ambient auto-play
         progressRef.current += velocityRef.current;
+        setIntensity(velocityRef.current);
         render();
       }
     };
@@ -148,7 +154,7 @@ export default function SpiralGallery() {
       cancelAnimationFrame(raf);
       el?.removeEventListener("wheel", onWheel);
     };
-  }, []);
+  }, [setIntensity]);
 
   return (
     <div
@@ -175,7 +181,10 @@ export default function SpiralGallery() {
               href={`/work/${project.slug}`}
               data-cursor="card"
               data-cursor-color={project.color}
-              onMouseEnter={() => setHovered(project.slug)}
+              onMouseEnter={() => {
+                setHovered(project.slug);
+                playTick();
+              }}
               onMouseLeave={() => setHovered(null)}
               onClick={(e) => {
                 e.preventDefault();
@@ -201,6 +210,59 @@ export default function SpiralGallery() {
           </div>
         </div>
       ))}
+
+      <button
+        type="button"
+        data-cursor="hover"
+        onClick={() => {
+          setSoundOn((prev) => {
+            const next = !prev;
+            if (next) {
+              enable();
+            } else {
+              disable();
+            }
+            return next;
+          });
+        }}
+        aria-label={soundOn ? "Mute sound" : "Enable sound"}
+        aria-pressed={soundOn}
+        className="pointer-events-auto fixed bottom-8 right-6 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-paper/15 bg-black/40 text-paper/80 backdrop-blur-sm transition-colors hover:text-paper md:bottom-10 md:right-10"
+      >
+        {soundOn ? (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polygon points="4 9 9 9 13 5 13 19 9 15 4 15 4 9" />
+            <path d="M17 8.5a5 5 0 0 1 0 7" />
+            <path d="M19.5 6a8.5 8.5 0 0 1 0 12" />
+          </svg>
+        ) : (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polygon points="4 9 9 9 13 5 13 19 9 15 4 15 4 9" />
+            <line x1="17" y1="8" x2="22" y2="13" />
+            <line x1="22" y1="8" x2="17" y2="13" />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }
