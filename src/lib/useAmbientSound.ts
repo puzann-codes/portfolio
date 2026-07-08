@@ -112,10 +112,22 @@ export function useAmbientSound() {
     return ctx;
   }, []);
 
-  const enable = useCallback(() => {
+  // returns whether the context actually ended up running — some gesture
+  // types (notably `wheel`) aren't accepted by every browser's autoplay
+  // policy as a valid "user activation", so `resume()` can silently no-op.
+  // Callers should keep listening for another gesture if this comes back
+  // false instead of assuming the one attempt worked.
+  const enable = useCallback(async () => {
     const ctx = ensureGraph();
-    if (ctx.state === "suspended") ctx.resume();
-    enabledRef.current = true;
+    if (ctx.state === "suspended") {
+      try {
+        await ctx.resume();
+      } catch {
+        // ignored — caller retries on the next gesture
+      }
+    }
+    enabledRef.current = ctx.state === "running";
+    return enabledRef.current;
   }, [ensureGraph]);
 
   const disable = useCallback(() => {

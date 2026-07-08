@@ -30,14 +30,21 @@ export default function Home() {
     // browsers block audio until a real user gesture — sound defaults to
     // "on" in UI state, but the AudioContext itself only actually starts
     // the moment the user first interacts with the page at all, not
-    // specifically the mute button
+    // specifically the mute button. Not every gesture type is accepted as
+    // a valid "user activation" by every browser's autoplay policy (`wheel`
+    // in particular often isn't), so `enable()` reports back whether it
+    // actually got the context running — if not, the listeners stay
+    // attached and it just tries again on the next gesture instead of
+    // giving up silently after one failed attempt.
     const unlock = () => {
-      if (unlockedRef.current) return;
-      unlockedRef.current = true;
-      if (soundOnRef.current) enable();
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-      window.removeEventListener("wheel", unlock);
+      if (unlockedRef.current || !soundOnRef.current) return;
+      enable().then((running) => {
+        if (!running) return;
+        unlockedRef.current = true;
+        window.removeEventListener("pointerdown", unlock);
+        window.removeEventListener("keydown", unlock);
+        window.removeEventListener("wheel", unlock);
+      });
     };
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("keydown", unlock);
