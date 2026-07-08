@@ -5,7 +5,6 @@ import { projects } from "@/lib/projects";
 import ProjectCover from "./ProjectCover";
 import { useWipeTransition } from "./TransitionProvider";
 import { useAmbientSound } from "@/lib/useAmbientSound";
-import HeroCar, { type HeroCarHandle } from "./HeroCar";
 import { cn } from "@/lib/utils";
 
 const N = projects.length;
@@ -77,7 +76,6 @@ export default function SpiralGallery() {
   const [hovered, setHovered] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(false);
   const { enable, disable, setIntensity, playTick } = useAmbientSound();
-  const carRef = useRef<HeroCarHandle>(null);
 
   useEffect(() => {
     const baseSpeed = 0.012;
@@ -129,7 +127,6 @@ export default function SpiralGallery() {
       progressRef.current += speed * dt;
       velocityRef.current *= 0.92;
       setIntensity(speed);
-      carRef.current?.updateSpeed(speed, now);
 
       render();
       raf = requestAnimationFrame(tick);
@@ -148,7 +145,6 @@ export default function SpiralGallery() {
         // manual, user-initiated scrubbing only — no ambient auto-play
         progressRef.current += velocityRef.current;
         setIntensity(velocityRef.current);
-        carRef.current?.updateSpeed(velocityRef.current, performance.now());
         render();
       }
     };
@@ -166,8 +162,6 @@ export default function SpiralGallery() {
       data-lenis-prevent
       className="relative h-full w-full overflow-hidden"
     >
-      <HeroCar ref={carRef} />
-
       {projects.map((project, i) => (
         <div
           key={project.slug}

@@ -212,27 +212,6 @@ body {
   animation: marquee 28s linear infinite;
 }
 
-/* exhaust puffs for HeroCar — restarted per-puff via a JS-triggered
-   animation reset (see components/HeroCar.tsx), not looped here */
-@keyframes exhaust-puff {
-  0% {
-    transform: translate(0, 0) scale(0.5);
-    opacity: 0.4;
-  }
-  60% {
-    opacity: 0.22;
-  }
-  100% {
-    transform: translate(-64px, -42px) scale(2.1);
-    opacity: 0;
-  }
-}
-
-.exhaust-puff {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
