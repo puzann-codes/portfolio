@@ -73,6 +73,20 @@ function CarModel({
     rearWheelsRef.current = REAR_WHEEL_NAMES.map((name) =>
       model.getObjectByName(name),
     ).filter((obj): obj is THREE.Object3D => Boolean(obj));
+
+    // the brake caliper/pad is modeled as a child of the wheel hub, but a
+    // real caliper is mounted to the suspension and doesn't spin with the
+    // wheel — left as a child, it ends up pointing in a random direction
+    // after the intro's several full rotations, reading as a broken wheel.
+    // attach() reparents it up to the (non-spinning) hub's parent while
+    // preserving its current world transform, so it stays put visually.
+    for (const name of [...FRONT_WHEEL_NAMES, ...REAR_WHEEL_NAMES]) {
+      const wheelGroup = model.getObjectByName(name);
+      const brakePad = model.getObjectByName(`${name}BrakePad`);
+      if (wheelGroup?.parent && brakePad) {
+        wheelGroup.parent.attach(brakePad);
+      }
+    }
   }, [model, frontWheelsRef, rearWheelsRef]);
 
   return <primitive object={model} />;
@@ -97,8 +111,15 @@ function SmokePuffs({ spritesRef }: { spritesRef: React.RefObject<THREE.Sprite[]
   );
 }
 
-function Rig({ onIntroComplete }: { onIntroComplete: () => void }) {
+function Rig({
+  onIntroComplete,
+  playTick,
+}: {
+  onIntroComplete: () => void;
+  playTick?: () => void;
+}) {
   const { camera } = useThree();
+  const lastHoverTickRef = useRef(0);
   const carGroupRef = useRef<THREE.Group>(null);
   const frontWheelsRef = useRef<THREE.Object3D[]>([]);
   const rearWheelsRef = useRef<THREE.Object3D[]>([]);
@@ -228,7 +249,22 @@ function Rig({ onIntroComplete }: { onIntroComplete: () => void }) {
   });
 
   return (
-    <group ref={carGroupRef} rotation={[0, START_ROT, 0]}>
+    <group
+      ref={carGroupRef}
+      rotation={[0, START_ROT, 0]}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        if (!doneRef.current || !playTick) return;
+        // sub-meshes fire their own over/out as the ray crosses the car's
+        // surface — a short cooldown keeps this one soft tick on entry
+        // instead of a machine-gun of clicks while the mouse wanders it
+        const now = performance.now();
+        if (now - lastHoverTickRef.current > 500) {
+          lastHoverTickRef.current = now;
+          playTick();
+        }
+      }}
+    >
       <CarModel frontWheelsRef={frontWheelsRef} rearWheelsRef={rearWheelsRef} />
       <SmokePuffs spritesRef={smokeSpritesRef} />
     </group>
@@ -237,8 +273,10 @@ function Rig({ onIntroComplete }: { onIntroComplete: () => void }) {
 
 export default function HeroCar3D({
   onIntroComplete,
+  playTick,
 }: {
   onIntroComplete?: () => void;
+  playTick?: () => void;
 }) {
   return (
     <div className="absolute inset-0">
@@ -246,7 +284,7 @@ export default function HeroCar3D({
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 8, 5]} intensity={1.2} />
         <Suspense fallback={null}>
-          <Rig onIntroComplete={() => onIntroComplete?.()} />
+          <Rig onIntroComplete={() => onIntroComplete?.()} playTick={playTick} />
           <Environment preset="city" />
         </Suspense>
       </Canvas>

@@ -151,17 +151,24 @@ export function useAmbientSound() {
     const ctx = ctxRef.current;
     if (!ctx || !enabledRef.current) return;
     const now = ctx.currentTime;
+
+    // a soft, low, rounded tap — gentle linear attack (no harsh transient),
+    // gliding down half an octave and fading out over ~170ms. Quiet on
+    // purpose: this should read as a subtle acknowledgment, not a UI blip
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
     osc.type = "sine";
-    osc.frequency.setValueAtTime(720 + Math.random() * 160, now);
-    osc.frequency.exponentialRampToValueAtTime(320, now + 0.09);
+    osc.frequency.setValueAtTime(340 + Math.random() * 30, now);
+    osc.frequency.exponentialRampToValueAtTime(210, now + 0.15);
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.05, now + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
-    osc.connect(g).connect(ctx.destination);
+    g.gain.linearRampToValueAtTime(0.032, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    osc.connect(filter).connect(g).connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.12);
+    osc.stop(now + 0.19);
   }, []);
 
   useEffect(() => {
